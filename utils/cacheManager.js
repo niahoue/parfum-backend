@@ -1,6 +1,6 @@
 // src/utils/cacheManager.js
 import redis from '../config/redisClient.js';
-import { memoryCache } from './memoryCahe.js';
+import { memoryCache } from './memoryCache.js';
 
 class CacheManager {
   constructor() {

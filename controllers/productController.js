@@ -3,10 +3,12 @@ import Product from '../models/Product.js';
 import cloudinary from '../config/cloudinary.js';
 import { cacheManager } from '../utils/cacheManager.js';
 
-// Mise à jour de la fonction getProducts dans productController.js
+// Correction complète de la fonction getProducts dans productController.js
 const getProducts = asyncHandler(async (req, res) => {
   const pageSize = Number(req.query.pageSize) || 10;
   const page = Number(req.query.pageNumber) || 1;
+
+  console.log('Paramètres de requête reçus:', req.query); // Debug
 
   // Génération de clé de cache basée sur tous les paramètres
   const cacheParams = {
@@ -17,8 +19,9 @@ const getProducts = asyncHandler(async (req, res) => {
     category: req.query.category || '',
     minPrice: req.query.minPrice || '',
     maxPrice: req.query.maxPrice || '',
-    isNew: req.query.isNew || '',
-    isBestSeller: req.query.isBestSeller || ''
+    isNew: req.query.isNew || req.query.isNewProduct || '',
+    isBestSeller: req.query.isBestSeller || '',
+    type: req.query.type || ''
   };
   
   const cacheKey = cacheManager.generateKey('products', 'list', cacheParams);
@@ -26,31 +29,38 @@ const getProducts = asyncHandler(async (req, res) => {
   // Tentative de récupération depuis le cache
   const cachedResult = await cacheManager.get(cacheKey);
   if (cachedResult) {
+    console.log('Résultat depuis le cache:', cachedResult.products.length, 'produits');
     return res.json(cachedResult);
   }
 
   // Construction des filtres
-  const keyword = req.query.keyword
-    ? {
-        name: {
-          $regex: req.query.keyword,
-          $options: 'i',
-        },
-      }
-    : {};
+  let filters = {};
 
-  const brand = req.query.brand
-    ? { brand: { $regex: new RegExp(req.query.brand, 'i') } }
-    : {};
+  // Filtre par mot-clé
+  if (req.query.keyword) {
+    filters.name = {
+      $regex: req.query.keyword,
+      $options: 'i',
+    };
+  }
+
+  // Filtre par marque
+  if (req.query.brand) {
+    filters.brand = { $regex: new RegExp(req.query.brand, 'i') };
+  }
+
+  // Filtre par type de produit
+  if (req.query.type) {
+    filters.type = { $regex: new RegExp(req.query.type, 'i') };
+  }
 
   // Filtrage par catégorie - accepter nom ou ID
-  let category = {};
   if (req.query.category) {
     const categoryValue = req.query.category;
     
     // Si c'est un ObjectId MongoDB (24 caractères hexadécimaux)
     if (/^[0-9a-fA-F]{24}$/.test(categoryValue)) {
-      category = { category: categoryValue };
+      filters.category = categoryValue;
     } else {
       // Sinon chercher par nom de catégorie
       try {
@@ -59,7 +69,9 @@ const getProducts = asyncHandler(async (req, res) => {
           name: { $regex: new RegExp(categoryValue, 'i') } 
         });
         if (foundCategory) {
-          category = { category: foundCategory._id };
+          filters.category = foundCategory._id;
+        } else {
+          console.log('Catégorie non trouvée:', categoryValue);
         }
       } catch (err) {
         console.warn('Erreur lors de la recherche de catégorie:', err);
@@ -67,51 +79,55 @@ const getProducts = asyncHandler(async (req, res) => {
     }
   }
 
-  const price = req.query.minPrice || req.query.maxPrice
-    ? {
-        price: {
-          ...(req.query.minPrice && { $gte: Number(req.query.minPrice) }),
-          ...(req.query.maxPrice && { $lte: Number(req.query.maxPrice) }),
-        },
-      }
-    : {};
+  // Filtre par prix
+  if (req.query.minPrice || req.query.maxPrice) {
+    filters.price = {};
+    if (req.query.minPrice) filters.price.$gte = Number(req.query.minPrice);
+    if (req.query.maxPrice) filters.price.$lte = Number(req.query.maxPrice);
+  }
 
-  // Nouveaux filtres
-  const isNewFilter = req.query.isNew === 'true' ? { isNew: true } : {};
-  const isBestSellerFilter = req.query.isBestSeller === 'true' ? { isBestSeller: true } : {};
+  // Filtre pour les nouveautés (accepte isNew ou isNewProduct)
+  if (req.query.isNew === 'true' || req.query.isNewProduct === 'true') {
+    filters.isNew = true;
+  }
 
-  const filters = { 
-    ...keyword, 
-    ...brand, 
-    ...category, 
-    ...price,
-    ...isNewFilter,
-    ...isBestSellerFilter
-  };
+  // Filtre pour les best-sellers
+  if (req.query.isBestSeller === 'true') {
+    filters.isBestSeller = true;
+  }
 
-  console.log('Filtres appliqués:', filters); // Debug
+  console.log('Filtres appliqués:', JSON.stringify(filters, null, 2)); // Debug
 
-  // Exécution parallèle des requêtes pour optimiser
-  const [count, products] = await Promise.all([
-    Product.countDocuments({ ...filters }),
-    Product.find({ ...filters })
-      .limit(pageSize)
-      .skip(pageSize * (page - 1))
-      .populate('category', 'name')
-      .lean() // Optimisation MongoDB - retourne des objets JS purs
-  ]);
+  try {
+    // Exécution parallèle des requêtes pour optimiser
+    const [count, products] = await Promise.all([
+      Product.countDocuments(filters),
+      Product.find(filters)
+        .limit(pageSize)
+        .skip(pageSize * (page - 1))
+        .populate('category', 'name')
+        .sort({ createdAt: -1 }) // Trier par date de création décroissante
+        .lean() // Optimisation MongoDB - retourne des objets JS purs
+    ]);
 
-  const result = { 
-    products, 
-    page, 
-    pages: Math.ceil(count / pageSize),
-    total: count
-  };
+    console.log('Produits trouvés:', products.length); // Debug
 
-  // Mise en cache avec TTL de 30 minutes
-  await cacheManager.set(cacheKey, result, 1800);
+    const result = { 
+      products, 
+      page, 
+      pages: Math.ceil(count / pageSize),
+      total: count
+    };
 
-  res.json(result);
+    // Mise en cache avec TTL de 30 minutes
+    await cacheManager.set(cacheKey, result, 1800);
+
+    res.json(result);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des produits:', error);
+    res.status(500);
+    throw new Error('Erreur lors de la récupération des produits');
+  }
 });
 // @desc    Fetch single product avec cache
 // @route   GET /api/products/:id
