@@ -3,21 +3,22 @@ import Product from '../models/Product.js';
 import cloudinary from '../config/cloudinary.js';
 import { cacheManager } from '../utils/cacheManager.js';
 
-// @desc    Fetch all products avec cache intelligent
-// @route   GET /api/products
-// @access  Public
+// Mise à jour de la fonction getProducts dans productController.js
 const getProducts = asyncHandler(async (req, res) => {
-  const pageSize = 10;
+  const pageSize = Number(req.query.pageSize) || 10;
   const page = Number(req.query.pageNumber) || 1;
 
   // Génération de clé de cache basée sur tous les paramètres
   const cacheParams = {
     page,
+    pageSize,
     keyword: req.query.keyword || '',
     brand: req.query.brand || '',
     category: req.query.category || '',
     minPrice: req.query.minPrice || '',
-    maxPrice: req.query.maxPrice || ''
+    maxPrice: req.query.maxPrice || '',
+    isNew: req.query.isNew || '',
+    isBestSeller: req.query.isBestSeller || ''
   };
   
   const cacheKey = cacheManager.generateKey('products', 'list', cacheParams);
@@ -39,12 +40,32 @@ const getProducts = asyncHandler(async (req, res) => {
     : {};
 
   const brand = req.query.brand
-    ? { brand: req.query.brand }
+    ? { brand: { $regex: new RegExp(req.query.brand, 'i') } }
     : {};
 
-  const category = req.query.category
-    ? { category: req.query.category }
-    : {};
+  // Filtrage par catégorie - accepter nom ou ID
+  let category = {};
+  if (req.query.category) {
+    const categoryValue = req.query.category;
+    
+    // Si c'est un ObjectId MongoDB (24 caractères hexadécimaux)
+    if (/^[0-9a-fA-F]{24}$/.test(categoryValue)) {
+      category = { category: categoryValue };
+    } else {
+      // Sinon chercher par nom de catégorie
+      try {
+        const Category = (await import('../models/Category.js')).default;
+        const foundCategory = await Category.findOne({ 
+          name: { $regex: new RegExp(categoryValue, 'i') } 
+        });
+        if (foundCategory) {
+          category = { category: foundCategory._id };
+        }
+      } catch (err) {
+        console.warn('Erreur lors de la recherche de catégorie:', err);
+      }
+    }
+  }
 
   const price = req.query.minPrice || req.query.maxPrice
     ? {
@@ -55,7 +76,20 @@ const getProducts = asyncHandler(async (req, res) => {
       }
     : {};
 
-  const filters = { ...keyword, ...brand, ...category, ...price };
+  // Nouveaux filtres
+  const isNewFilter = req.query.isNew === 'true' ? { isNew: true } : {};
+  const isBestSellerFilter = req.query.isBestSeller === 'true' ? { isBestSeller: true } : {};
+
+  const filters = { 
+    ...keyword, 
+    ...brand, 
+    ...category, 
+    ...price,
+    ...isNewFilter,
+    ...isBestSellerFilter
+  };
+
+  console.log('Filtres appliqués:', filters); // Debug
 
   // Exécution parallèle des requêtes pour optimiser
   const [count, products] = await Promise.all([
@@ -79,7 +113,6 @@ const getProducts = asyncHandler(async (req, res) => {
 
   res.json(result);
 });
-
 // @desc    Fetch single product avec cache
 // @route   GET /api/products/:id
 // @access  Public

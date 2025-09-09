@@ -71,7 +71,7 @@ app.get('/api/health', async (req, res) => {
         stats: memoryCache.getStats()
       },
       redis: {
-        status: 'OK', // Sera mis à jour par le test de connexion
+        status: 'OK', 
         connected: false
       }
     }
