@@ -7,6 +7,8 @@ import {
   createProduct,
   updateProduct,
   createProductReview,
+  getProductBrands,
+  getProductTypes
 } from '../controllers/productController.js';
 import { protect, admin } from '../middlewares/authMiddleware.js';
 import {upload }from '../middlewares/uploadMiddleware.js';
@@ -27,6 +29,8 @@ router.route('/')
     invalidateCache(['products:list', 'stats']),
     createProduct
   );
+router.route('/brands').get(getProductBrands);
+router.route('/types').get(getProductTypes);
 
 router.route('/:id')
   .get(

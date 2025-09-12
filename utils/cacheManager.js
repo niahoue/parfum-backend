@@ -41,14 +41,12 @@ class CacheManager {
       // Niveau 1: Cache mémoire
       const memoryData = memoryCache.get(key);
       if (memoryData) {
-        console.log(`✅ Cache HIT (Memory): ${key}`);
         return JSON.parse(memoryData);
       }
 
       // Niveau 2: Redis
       const redisData = await redis.safeGet(key);
       if (redisData) {
-        console.log(`✅ Cache HIT (Redis): ${key}`);
         const parsedData = JSON.parse(redisData);
         
         // Remettre en cache mémoire avec TTL plus court
@@ -58,8 +56,6 @@ class CacheManager {
         
         return parsedData;
       }
-
-      console.log(`❌ Cache MISS: ${key}`);
       return null;
     } catch (error) {
       console.warn(`Cache GET error for ${key}:`, error.message);
@@ -80,8 +76,6 @@ class CacheManager {
       
       // Stocker dans le cache mémoire
       memoryCache.set(key, jsonData, memoryTTL);
-      
-      console.log(`💾 Cache SET: ${key} (Redis: ${redisTTL}s, Memory: ${memoryTTL}s)`);
       return true;
     } catch (error) {
       console.warn(`Cache SET error for ${key}:`, error.message);
@@ -93,8 +87,7 @@ class CacheManager {
   async invalidate(key) {
     try {
       await redis.del(key);
-      memoryCache.delete(key);
-      console.log(`🗑️  Cache INVALIDATED: ${key}`);
+      memoryCache.delete(key)
     } catch (error) {
       console.warn(`Cache invalidation error for ${key}:`, error.message);
     }
@@ -115,8 +108,6 @@ class CacheManager {
           memoryCache.delete(key);
         }
       }
-      
-      console.log(`🗑️  Cache PATTERN INVALIDATED: ${pattern}* (${keys.length} keys)`);
     } catch (error) {
       console.warn(`Cache pattern invalidation error for ${pattern}:`, error.message);
     }
@@ -147,6 +138,28 @@ class CacheManager {
       return null;
     }
   }
+  // Ajout de la méthode keys
+async keys(pattern = null) {
+  try {
+    const redisKeys = await redis.safeKeys(pattern ? `${pattern}*` : '*');
+    const memoryKeys = memoryCache.keys(pattern);
+    return {
+      redis: redisKeys,
+      memory: memoryKeys,
+      total: {
+        redis: redisKeys.length,
+        memory: memoryKeys.length
+      }
+    };
+  } catch (error) {
+    console.warn('Erreur lors de la récupération des clés de cache:', error.message);
+    return {
+      redis: [],
+      memory: [],
+      total: { redis: 0, memory: 0 }
+    };
+  }
+}
 }
 
 export const cacheManager = new CacheManager();

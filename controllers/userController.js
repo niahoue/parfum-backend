@@ -2,6 +2,7 @@ import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 import Product from '../models/Product.js';
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import { sendResetPasswordEmail } from '../utils/emailService.js';
 import generateToken from '../utils/generateToken.js';
 
@@ -10,16 +11,14 @@ import generateToken from '../utils/generateToken.js';
 // @access  Public
 const authUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-
   const user = await User.findOne({ email }).select('+password');
-
   if (user && (await user.matchPassword(password))) {
     res.json({
       _id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role, // 🔥 CORRECTION : Utiliser user.role au lieu de user.isAdmin
-      isAdmin: user.role === 'admin', // 🔥 MAINTIEN : Pour compatibilité
+      role: user.role, 
+      isAdmin: user.role === 'admin', 
       token: generateToken(user._id),
     });
   } else {
@@ -144,26 +143,20 @@ const updateUserProfile = asyncHandler(async (req, res) => {
 const forgotPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
 
-  console.log(`🔍 Recherche de l'utilisateur avec email: ${email}`);
-
   const user = await User.findOne({ email });
 
   if (!user) {
-    console.log(`❌ Aucun utilisateur trouvé avec l'email: ${email}`);
+
     res.status(404);
     throw new Error('Utilisateur non trouvé avec cet email');
   }
-
-  console.log(`✅ Utilisateur trouvé: ${user.name} (${user.email})`);
 
   // Générer le token de réinitialisation
   const resetToken = user.getResetPasswordToken();
 
   try {
     await user.save({ validateBeforeSave: false });
-    console.log(`💾 Token de réinitialisation sauvegardé pour l'utilisateur: ${user.email}`);
   } catch (error) {
-    console.error('❌ Erreur lors de la sauvegarde du token:', error);
     res.status(500);
     throw new Error('Erreur lors de la génération du token de réinitialisation');
   }
@@ -179,15 +172,9 @@ const forgotPassword = asyncHandler(async (req, res) => {
 
   const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
 
-  console.log(`🔗 URL de réinitialisation générée: ${resetUrl}`);
-
   try {
-    console.log(`📧 Tentative d'envoi d'email à: ${user.email}`);
-
+  
     const emailResult = await sendResetPasswordEmail(user, resetUrl);
-
-    console.log(`✅ Email envoyé avec succès:`, emailResult);
-
     res.status(200).json({
       success: true,
       message: 'Email de réinitialisation envoyé avec succès',
@@ -198,15 +185,11 @@ const forgotPassword = asyncHandler(async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erreur lors de l\'envoi de l\'email:', error);
-
-    // Nettoyer le token en cas d'échec
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
 
     try {
       await user.save({ validateBeforeSave: false });
-      console.log('🧹 Token de réinitialisation nettoyé après échec d\'envoi');
     } catch (saveError) {
       console.error('❌ Erreur lors du nettoyage du token:', saveError);
     }
@@ -220,41 +203,50 @@ const forgotPassword = asyncHandler(async (req, res) => {
 // @route   PUT /api/users/resetpassword/:token
 // @access  Public
 const resetPassword = asyncHandler(async (req, res) => {
-  console.log(`🔐 Tentative de réinitialisation avec token: ${req.params.token}`);
+  const { password } = req.body;
+  const { token } = req.params;
 
-  const resetPasswordToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
 
-  console.log(`🔍 Recherche d'utilisateur avec token hashé: ${resetPasswordToken}`);
+  const resetPasswordToken = crypto.createHash('sha256').update(token).digest('hex');
 
+  // Recherche de l'utilisateur avec le token et une date d'expiration valide
   const user = await User.findOne({
     resetPasswordToken,
     resetPasswordExpire: { $gt: Date.now() },
-  });
+  }).select('+password'); 
 
   if (!user) {
-    console.log(`❌ Token invalide ou expiré`);
+  
     res.status(400);
     throw new Error('Token invalide ou expiré');
   }
 
-  console.log(`✅ Token valide pour l'utilisateur: ${user.email}`);
+  // Vérification de la longueur du mot de passe côté serveur pour plus de sécurité
+  if (password.length < 6) {
+    res.status(400);
+    throw new Error('Le mot de passe doit contenir au moins 6 caractères');
+  }
+  
+  // ⚠️ CORRECTION: Ne pas hacher manuellement le mot de passe
+  // Laissez le middleware pre('save') s'en charger
+  user.password = password; // Assigner directement le mot de passe en clair
 
-  // Définir le nouveau mot de passe
-  user.password = req.body.password;
   user.resetPasswordToken = undefined;
   user.resetPasswordExpire = undefined;
 
-  await user.save();
-
-  console.log(`✅ Mot de passe réinitialisé avec succès pour: ${user.email}`);
-
-  res.status(200).json({
-    success: true,
-    message: 'Mot de passe mis à jour avec succès',
-    data: {
-      email: user.email
-    }
-  });
+  try {
+    await user.save();
+    res.status(200).json({
+      success: true,
+      message: 'Mot de passe mis à jour avec succès',
+      data: {
+        email: user.email
+      }
+    });
+  } catch (saveError) {
+    res.status(500);
+    throw new Error('Erreur interne du serveur lors de la mise à jour du mot de passe');
+  }
 });
 
 // @desc    Add a product to wishlist
@@ -429,21 +421,24 @@ const updateProductInCart = asyncHandler(async (req, res) => {
 const removeProductFromCart = asyncHandler(async (req, res) => {
   const { productId } = req.params;
   const user = await User.findById(req.user._id);
-
   if (!user) {
     res.status(404);
     throw new Error('Utilisateur non trouvé');
   }
 
   const initialLength = user.cart.length;
-  user.cart = user.cart.filter(item => item.product.toString() !== productId);
+  user.cart = user.cart.filter(item => {
+    const match = item.product.toString() !== productId;
+    return match;
+  });
 
   if (user.cart.length === initialLength) {
     res.status(404);
-    throw new Error('Produit non trouvé dans le panier');
+    throw new Error(`Produit ${productId} non trouvé dans le panier`);
   }
 
   await user.save();
+  
   const updatedUser = await User.findById(req.user._id).populate('cart.product');
   const cartItems = updatedUser.cart.map(item => ({
     _id: item.product._id,
@@ -454,6 +449,7 @@ const removeProductFromCart = asyncHandler(async (req, res) => {
     countInStock: item.product.countInStock,
     qty: item.qty,
   }));
+
   res.status(200).json({ message: 'Produit retiré du panier', cartItems });
 });
 
@@ -492,7 +488,7 @@ const getAllUser = asyncHandler(async(req,res)=> {
 const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (user) {
-    await user.remove();
+    await user.deleteOne();
     res.json({ message: 'Utilisateur supprimé avec succès' });
   } else {
     res.status(404);
@@ -500,11 +496,39 @@ const deleteUser = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Update user by ID
+// @route   PUT /api/users/:id
+// @access  Private/Admin
+const updateUserRole = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+
+  if (user) {
+    user.name = req.body.name || user.name;
+    user.email = req.body.email || user.email;
+    user.role = req.body.role || user.role; // Permettre la mise à jour du rôle
+    // Autres champs...
+
+    const updatedUser = await user.save();
+    res.json({
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      isAdmin: updatedUser.role === 'admin'
+    });
+  } else {
+    res.status(404);
+    throw new Error('Utilisateur non trouvé');
+  }
+});
+
+
 export {
   authUser,
   registerUser,
   getUserProfile,
   updateUserProfile,
+  updateUserRole,
   forgotPassword,
   resetPassword,
   addToWishlist,

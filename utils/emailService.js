@@ -55,8 +55,6 @@ export const sendOrderConfirmationEmail = async (order) => {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Email de confirmation envoyé à ${order.userEmail}`);
-    console.log('Message ID:', info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Erreur lors de l\'envoi de l\'email de confirmation:', error);
@@ -70,9 +68,6 @@ export const sendOrderConfirmationEmail = async (order) => {
  * @param {string} resetUrl - Le lien de réinitialisation du mot de passe
  */
 export const sendResetPasswordEmail = async (user, resetUrl) => {
-  console.log(`📧 Tentative d'envoi d'email de réinitialisation à: ${user.email}`);
-  console.log(`🔗 URL de réinitialisation: ${resetUrl}`);
-
   const mailOptions = {
     from: `"Fragrance de Mumu" <${process.env.EMAIL_FROM}>`,
     to: user.email,
@@ -145,7 +140,6 @@ export const sendContactEmail = async (message) => {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Email de contact envoyé à l'admin (${process.env.EMAIL_USER})`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error("❌ Erreur lors de l'envoi de l'email de contact:", error);

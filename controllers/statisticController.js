@@ -34,15 +34,15 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
 
   // Commandes récentes (limitées à 5 ou 10, pour un aperçu rapide)
   const recentOrders = await Order.find({})
-    .sort({ createdAt: -1 }) // Trier par date de création décroissante
+    .sort({ createdAt: -1 }) 
     .limit(10)
-    .populate('user', 'name email'); // Populer l'utilisateur associé
+    .populate('user', 'name email');
 
   res.json({
     usersCount,
     productsCount,
     ordersCount,
-    totalRevenue: totalRevenue.length > 0 ? totalRevenue[0].total : 0, // Gérer le cas où il n'y a pas de commandes payées
+    totalRevenue: totalRevenue.length > 0 ? totalRevenue[0].total : 0, 
     recentOrders,
   });
 });

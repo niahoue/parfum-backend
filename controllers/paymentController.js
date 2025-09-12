@@ -23,7 +23,7 @@ const setupPaydunya = () => {
 
   const store = new paydunya.Store({
     name: 'Fragrance de Mumu',
-    tagline: 'Votre destination parfum de luxe',
+    tagline: 'Votre site de  parfum de luxe et a moindre coût',
     phoneNumber: '+225 0767758052',
     postalAddress: 'Abidjan, Côte d\'Ivoire',
     logoURL: process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/logo.png` : undefined,

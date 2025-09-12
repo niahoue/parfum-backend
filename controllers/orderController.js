@@ -20,7 +20,7 @@ const addOrderItems = asyncHandler(async (req, res) => {
 
   if (orderItems && orderItems.length === 0) {
     res.status(400);
-    throw new new Error('Aucun article de commande');
+    throw new Error('Aucun article de commande');
   } else {
     const order = new Order({
       orderItems,
@@ -35,12 +35,8 @@ const addOrderItems = asyncHandler(async (req, res) => {
     const createdOrder = await order.save();
 
     // Envoi de l'email de confirmation après la création de la commande
-    // Assurez-vous que l'email de l'utilisateur est disponible via `req.user`
     if (createdOrder) {
-      // Pour populater l'utilisateur, vous devez d'abord sauvegarder la commande
-      // puis la re-chercher ou utiliser execPopulate si c'est une ancienne version de Mongoose
-      // Pour les versions modernes (Mongoose 6+), populate après save est direct:
-      const populatedOrder = await Order.findById(createdOrder._id).populate('user', 'email').exec();
+      const populatedOrder = await Order.findById(createdOrder._id).populate('user', 'name email').exec();
       if (populatedOrder && populatedOrder.user && populatedOrder.user.email) {
           sendOrderConfirmationEmail({
             ...populatedOrder._doc,
@@ -128,8 +124,32 @@ const getMyOrders = asyncHandler(async (req, res) => {
  * @access  Privé/Admin
  */
 const getOrders = asyncHandler(async (req, res) => {
-  const orders = await Order.find({}).populate('user', 'id name email').sort({ createdAt: -1 });
-  res.json(orders);
+  try {
+    const orders = await Order.find({})
+      .populate({
+        path: 'user',
+        select: 'name email',
+        // Ajouter une option pour gérer les cas où l'utilisateur n'existe plus
+        options: { strictPopulate: false }
+      })
+      .sort({ createdAt: -1 });
+    
+    // Log pour débugger
+    console.log('Orders récupérées:', orders.length);
+    orders.forEach(order => {
+      console.log(`Order ${order._id}:`, {
+        userId: order.user?._id,
+        userName: order.user?.name,
+        userEmail: order.user?.email
+      });
+    });
+    
+    res.json(orders);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des commandes:', error);
+    res.status(500);
+    throw new Error('Erreur lors de la récupération des commandes');
+  }
 });
 
 /**
@@ -176,5 +196,5 @@ export {
   getMyOrders,
   getOrders,
   updateOrderToDelivered,
-  deleteOrder, // Exportez la nouvelle fonction
+  deleteOrder,
 };

@@ -51,12 +51,12 @@ const productSchema = mongoose.Schema(
       type: String,
       required: true,
     },
-    rating: { // Note moyenne du produit
+    rating: { 
       type: Number,
       required: true,
       default: 0,
     },
-    numReviews: { // Nombre total d'avis
+    numReviews: { 
       type: Number,
       required: true,
       default: 0,
@@ -70,13 +70,27 @@ const productSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    type: { type: String }, // Ex: Eau de Parfum, Eau de Toilette
-    size: { type: String }, // Ex: 50ml, 100ml
-    notes: [{ type: String }], // Ex: boisé, floral
+    type: { type: String }, 
+    size: { type: String }, 
+    notes: [{ type: String }], 
   },
   {
-    timestamps: true, // Ajoute automatiquement createdAt et updatedAt pour le produit lui-même
+    timestamps: true,
   }
 );
+// Middleware Mongoose pour recalculer la note et le nombre d'avis
+productSchema.pre('save', function(next) {
+  if (this.isModified('reviews')) {
+    const numReviews = this.reviews.length;
+    const totalRating = this.reviews.reduce((sum, review) => sum + review.rating, 0);
+    this.numReviews = numReviews;
+    this.rating = numReviews > 0 ? (totalRating / numReviews) : 0;
+  }
+  next();
+});
+
+productSchema.index({ name: 'text', description: 'text' });
+productSchema.index({ category: 1, brand: 1 }); 
+productSchema.index({ rating: -1, numReviews: -1 })
 
 export default mongoose.model('Product', productSchema);

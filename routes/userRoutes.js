@@ -14,8 +14,9 @@ import {
   removeProductFromCart,
   clearUserCart,
   getUser,
-  getAllUser, // Ajout de la virgule manquante ici
-  deleteUser
+  getAllUser, 
+  deleteUser,
+  updateUserRole
 } from '../controllers/userController.js';
 import { protect ,admin} from '../middlewares/authMiddleware.js';
 
@@ -45,7 +46,7 @@ router.route('/cart/clear').post(protect, clearUserCart); // Route pour vider le
 // Routes protégées par l'authentification et le rôle administrateur
 router.route('/').get(protect, admin, getAllUser); // Récupérer tous les utilisateurs (Admin)
 router.route('/:id').get(protect, admin, getUser); // Récupérer un utilisateur par ID (Admin)
-router.route('/:id').delete(protect, admin, deleteUser); // Supprimer un utilisateur (Admin)
-
+router.route('/:id').delete(protect, admin, deleteUser);
+router.route('/:id').put(protect, admin, updateUserRole); // Mettre à jour un utilisateur par ID (Admin)
 
 export default router;

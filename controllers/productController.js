@@ -8,7 +8,6 @@ const getProducts = asyncHandler(async (req, res) => {
   const pageSize = Number(req.query.pageSize) || 10;
   const page = Number(req.query.pageNumber) || 1;
 
-  console.log('Paramètres de requête reçus:', req.query); // Debug
 
   // Génération de clé de cache basée sur tous les paramètres
   const cacheParams = {
@@ -29,7 +28,6 @@ const getProducts = asyncHandler(async (req, res) => {
   // Tentative de récupération depuis le cache
   const cachedResult = await cacheManager.get(cacheKey);
   if (cachedResult) {
-    console.log('Résultat depuis le cache:', cachedResult.products.length, 'produits');
     return res.json(cachedResult);
   }
 
@@ -96,7 +94,6 @@ const getProducts = asyncHandler(async (req, res) => {
     filters.isBestSeller = true;
   }
 
-  console.log('Filtres appliqués:', JSON.stringify(filters, null, 2)); // Debug
 
   try {
     // Exécution parallèle des requêtes pour optimiser
@@ -106,11 +103,10 @@ const getProducts = asyncHandler(async (req, res) => {
         .limit(pageSize)
         .skip(pageSize * (page - 1))
         .populate('category', 'name')
-        .sort({ createdAt: -1 }) // Trier par date de création décroissante
-        .lean() // Optimisation MongoDB - retourne des objets JS purs
+        .sort({ createdAt: -1 }) 
+        .lean() 
     ]);
 
-    console.log('Produits trouvés:', products.length); // Debug
 
     const result = { 
       products, 
@@ -353,39 +349,68 @@ const createProductReview = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
 
   if (product) {
+    // Check if user has already reviewed this product
     const alreadyReviewed = product.reviews.find(
       (r) => r.user.toString() === req.user._id.toString()
     );
 
     if (alreadyReviewed) {
       res.status(400);
-      throw new Error('Produit déjà commenté');
+      throw new Error('Vous avez déjà soumis un avis pour ce produit.');
     }
 
     const review = {
-      name: req.user.name || req.user.email || 'Utilisateur Anonyme',
+      name: req.user.name,
       rating: Number(rating),
       comment,
       user: req.user._id,
     };
 
     product.reviews.push(review);
-    product.numReviews = product.reviews.length;
-    product.rating = product.reviews.reduce((acc, item) => item.rating + acc, 0) / product.reviews.length;
-
+    // Le middleware pre('save') de Mongoose dans le modèle Product
+    // se chargera de mettre à jour `numReviews` et `rating`.
     await product.save();
 
-    // Invalidation du cache pour ce produit spécifique
-    await Promise.all([
-      cacheManager.invalidate(cacheManager.generateKey('products', `single:${req.params.id}`)),
-      cacheManager.invalidateByPattern('products:list'), // Les listes incluent les ratings
-    ]);
+    // Invalider le cache du produit pour qu'il soit rechargé avec le nouvel avis
+    await cacheManager.invalidate(cacheManager.generateKey('products', `single:${product._id}`));
+    await cacheManager.invalidateByPattern('products:list'); // Invalider les listes de produits
 
-    res.status(201).json({ message: 'Avis ajouté' });
+    res.status(201).json({ message: 'Avis ajouté avec succès' });
   } else {
     res.status(404);
     throw new Error('Produit non trouvé');
   }
+});
+// @desc    Get all unique product brands
+// @route   GET /api/products/brands
+// @access  Public
+const getProductBrands = asyncHandler(async (req, res) => {
+  const cacheKey = cacheManager.generateKey('products', 'brands');
+  let brands = await cacheManager.get(cacheKey);
+
+  if (!brands) {
+    const products = await Product.find({}, 'brand').distinct('brand');
+    brands = products.filter(brand => brand && brand.trim() !== '');
+    await cacheManager.set(cacheKey, brands, 3600); // Cache pour 1 heure
+  }
+
+  res.json(brands);
+});
+
+// @desc    Get all unique product types
+// @route   GET /api/products/types
+// @access  Public
+const getProductTypes = asyncHandler(async (req, res) => {
+  const cacheKey = cacheManager.generateKey('products', 'types');
+  let types = await cacheManager.get(cacheKey);
+
+  if (!types) {
+    const products = await Product.find({}, 'type').distinct('type');
+    types = products.filter(type => type && type.trim() !== '');
+    await cacheManager.set(cacheKey, types, 3600); // Cache pour 1 heure
+  }
+
+  res.json(types);
 });
 
 export { 
@@ -394,5 +419,7 @@ export {
   deleteProduct, 
   createProduct, 
   updateProduct, 
-  createProductReview 
+  createProductReview ,
+  getProductBrands,
+  getProductTypes
 };

@@ -19,12 +19,10 @@ router.post('/unsubscribe', unsubscribeFromNewsletter);
 
 // Routes privées/admin pour la gestion des abonnés
 router.route('/subscribers')
-  .get(protect, admin, getAllSubscribers); // Obtenir tous les abonnés (Admin)
-
+  .get(protect, admin, getAllSubscribers); 
 router.route('/subscribers/:id')
-  .delete(protect, admin, deleteSubscriber); // Supprimer un abonné par ID (Admin)
-
+  .delete(protect, admin, deleteSubscriber); 
 router.route('/subscribers/:id')
-  .put(protect, admin, updateSubscriber); // Mettre à jour un abonné par ID (Admin)
+  .put(protect, admin, updateSubscriber); 
 
 export default router;

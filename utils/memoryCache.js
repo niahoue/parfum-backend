@@ -224,6 +224,5 @@ setInterval(() => {
 if (process.env.NODE_ENV === 'development') {
   setInterval(() => {
     const stats = memoryCache.getStats();
-    console.log('📊 Cache Memory Stats:', stats);
   }, 60 * 60 * 1000);
 }

@@ -48,4 +48,14 @@ redis.safeSet = async function(key, value, mode, duration) {
   }
 };
 
+redis.safeKeys = async (pattern) => {
+  try {
+    if (redis.status !== 'ready') return [];
+    return await redis.keys(pattern);
+  } catch (error) {
+    console.error('Erreur Redis safeKeys:', error.message);
+    return [];
+  }
+};
+
 export default redis;

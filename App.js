@@ -11,6 +11,7 @@ import promotionRoutes from './routes/promotionRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
 import cacheRoutes from './routes/cacheRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
+import sitemapRoutes from './routes/sitemapRoutes.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js';  
 import { warmupCache } from './middlewares/cacheMiddleware.js';
 import { cacheManager } from './utils/cacheManager.js';
@@ -111,6 +112,7 @@ app.use('/api/promotions', promotionRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/cache', cacheRoutes); 
 app.use('/api/contact', contactRoutes);
+app.use(sitemapRoutes)
 
 // Middleware de préchauffage du cache au démarrage
 app.use('/api/warmup', warmupCache);

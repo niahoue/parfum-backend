@@ -143,35 +143,16 @@ const invalidateProductCache = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Obtenir les clés de cache existantes
-// @route   GET /api/cache/keys
-// @access  Private/Admin
 const getCacheKeys = asyncHandler(async (req, res) => {
   const { pattern } = req.query;
-  const searchPattern = pattern ? `${pattern}*` : '*';
-  
   try {
-    // Récupération depuis Redis
-    const redisKeys = await redis.keys(searchPattern);
-    
-    // Récupération depuis le cache mémoire
-    const memoryKeys = Array.from(memoryCache.cache.keys())
-      .filter(key => pattern ? key.startsWith(pattern) : true);
-    
+    const keys = await cacheManager.keys(pattern);
     res.json({
       success: true,
-      data: {
-        redis: redisKeys,
-        memory: memoryKeys,
-        total: {
-          redis: redisKeys.length,
-          memory: memoryKeys.length
-        }
-      }
+      data: keys,
     });
   } catch (error) {
-    console.error('Erreur lors de la récupération des clés:', error);
-    res.status(500);
+    
     throw new Error('Erreur lors de la récupération des clés de cache');
   }
 });
